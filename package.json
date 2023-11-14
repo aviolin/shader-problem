@@ -1,0 +1,19 @@
+{
+  "name": "shader-test",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "parcel watch src/scripts/*-index.js src/scripts/index.js src/styles/screen.scss --public-url='/dist'  --dist-dir dist",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "parcel": "^2.10.1",
+    "three": "^0.157.0"
+  },
+  "devDependencies": {
+    "@parcel/transformer-glsl": "^2.10.1",
+    "@parcel/transformer-sass": "^2.10.1"
+  }
+}
