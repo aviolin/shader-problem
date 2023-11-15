@@ -615,8 +615,11 @@ exports.export = function(dest, destName, get) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 var _three = require("three");
-var _test2GlslJs = require("../shaders/test2.glsl.js");
-var _bouncyGlslJs = require("../shaders/bouncy.glsl.js");
+var _bouncy2GlslJs = require("../shaders/bouncy2.glsl.js");
+var _effectComposerJs = require("three/examples/jsm/postprocessing/EffectComposer.js");
+var _renderPassJs = require("three/examples/jsm/postprocessing/RenderPass.js");
+var _ssaarenderPassJs = require("three/examples/jsm/postprocessing/SSAARenderPass.js");
+var _outputPassJs = require("three/examples/jsm/postprocessing/OutputPass.js");
 class ScrollRig {
     constructor(rig, itemSelector = "[data-mx-shader]"){
         if (!rig) {
@@ -630,14 +633,9 @@ class ScrollRig {
         this.scroller.classList.add("scroller");
         this.rig.appendChild(this.scroller);
         this.rigItems = rig.querySelectorAll(itemSelector);
-        this.mouse = new _three.Vector2();
         // Bind methods
         this.update = this.update.bind(this);
         this.onResize = this.onResize.bind(this);
-        this.onMouseMove = this.onMouseMove.bind(this);
-        this.onMouseClick = this.onMouseClick.bind(this);
-        this.onCardEnter = this.onCardEnter.bind(this);
-        this.onCardLeave = this.onCardLeave.bind(this);
         this.init();
     }
     init() {
@@ -645,7 +643,6 @@ class ScrollRig {
         window.addEventListener("resize", this.onResize);
         window.addEventListener("mousemove", this.onMouseMove);
         window.addEventListener("scroll", this.onMouseMove);
-        document.addEventListener("click", this.onMouseClick);
         window.requestAnimationFrame(this.update);
     }
     initThree() {
@@ -657,7 +654,10 @@ class ScrollRig {
         this.camera = new _three.OrthographicCamera(this.scroller.offsetWidth / -2, this.scroller.offsetWidth / 2, this.scroller.offsetHeight / 2, this.scroller.offsetHeight / -2, 1, 1000);
         this.camera.position.set(0, 0, 10);
         // Create a renderer and attach to a dom element
-        this.renderer = new _three.WebGLRenderer();
+        this.renderer = new _three.WebGLRenderer({
+            antialias: true
+        });
+        this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.domElement.width = "100%";
         this.renderer.domElement.height = "100%";
         this.renderer.setClearColor(0x000000, 0);
@@ -695,22 +695,19 @@ class ScrollRig {
                     uResolution: {
                         value: new _three.Vector2(width, height)
                     },
-                    uPoint: {
-                        value: new _three.Vector3()
+                    uEffect: {
+                        value: new _three.Vector4()
+                    },
+                    uMouse: {
+                        value: new _three.Vector2(window.innerWidth, window.innerHeight)
                     }
                 },
-                vertexShader: (0, _bouncyGlslJs.vertexShader),
-                fragmentShader: (0, _bouncyGlslJs.fragmentShader),
-                // vertexShader,
-                // fragmentShader,
+                vertexShader: (0, _bouncy2GlslJs.vertexShader),
+                fragmentShader: (0, _bouncy2GlslJs.fragmentShader),
                 transparent: true,
                 opacity: 0
             });
-            const testMaterial = new _three.MeshBasicMaterial({
-                color: "red",
-                transparent: true,
-                opacity: .5
-            });
+            // const testMaterial = new THREE.MeshBasicMaterial({ color: 'red', transparent: true, opacity: .5 });
             // Create a plane geometry matching the image dimensions
             const geometry = new _three.PlaneGeometry(width * 2, height * 2, 1, 1);
             // Create a plane mesh with the image texture and add to the scene
@@ -718,8 +715,8 @@ class ScrollRig {
             plane.position.set(this.camera.left + width / 2 + left, this.camera.top - top - height / 2 - window.pageYOffset, -i);
             this.scene.add(plane);
             // Hide the original image element
-            img.style.opacity = 0;
-            this.scrollerItems.push({
+            img.style.opacity = .0;
+            const thisObj = this.scrollerItems.push({
                 // DOM element
                 ele: item,
                 img,
@@ -731,35 +728,30 @@ class ScrollRig {
                 material: item.material
             });
             const onEnter = (e)=>{
-                item.material.uniforms.uPoint.value = new _three.Vector3(event.clientX, this.scroller.offsetHeight - event.clientY - window.pageYOffset, 60);
+                // if (item.material.uniforms.uEffect.value.z > 0) return;
+                const rect = item.getBoundingClientRect();
                 item.material.uniforms.uTime.value = 0;
+                item.material.uniforms.uEffect.value = new _three.Vector4(event.clientX - rect.left, rect.top - event.clientY, 60, -1);
             };
             const onLeave = (e)=>{
-                item.material.uniforms.uPoint.value = new _three.Vector3(event.clientX, this.scroller.offsetHeight - event.clientY - window.pageYOffset, 60);
+                // if (item.material.uniforms.uEffect.value.z > 0) return;
+                const rect = item.getBoundingClientRect();
                 item.material.uniforms.uTime.value = 0;
-            };
-            const onClick = (e)=>{
-                // item.material.uniforms.uPoint.value = new THREE.Vector3(event.clientX, this.scroller.offsetHeight - event.clientY - window.pageYOffset, 60);
-                item.material.uniforms.uTime.value = 0;
-                this.mouse.x = event.clientX;
-                this.mouse.y = event.clientY;
-            // item.material.uniforms.uMouse.value = new THREE.Vector2( -(left - this.mouse.x), (top - this.mouse.y - window.pageYOffset));
+                item.material.uniforms.uEffect.value = new _three.Vector4(event.clientX - rect.left, rect.top - event.clientY, 60, 1);
             };
             img.addEventListener("mouseenter", onEnter);
             img.addEventListener("mouseleave", onLeave);
-            img.addEventListener("click", onClick);
         });
     }
     update() {
-        // Update the time uniform on each shader material  (EXTRACT OUT)
         this.scrollerItems.forEach((item)=>{
+            let curUEffect = item.material.uniforms.uEffect.value;
             item.material.uniforms.uTime.value += 1;
-        // item.material.uniforms.bufferTexture.value = this.renderTarget.texture;
+            item.material.uniforms.uEffect.value = new _three.Vector4(curUEffect.x, curUEffect.y, Math.max(0, curUEffect.z - 1), curUEffect.w);
         });
-        // let curUPoint = this.customPass.uniforms.uPoint.value;
-        // this.customPass.uniforms.uPoint.value = new THREE.Vector3(curUPoint.x, curUPoint.y,Math.max(0, curUPoint.z - 1));
         // Render the scene
         this.renderer.render(this.scene, this.camera);
+        // this.composer.render();
         // Request next frame of animation
         requestAnimationFrame(this.update);
     }
@@ -774,34 +766,10 @@ class ScrollRig {
         this.renderer.setSize(this.scroller.offsetWidth, this.scroller.offsetHeight);
         this.update();
     }
-    onMouseMove(event1) {
-        this.scrollerItems.forEach((item, i)=>{
-            if (event1.clientX) {
-                this.mouse.x = event1.clientX;
-                this.mouse.y = event1.clientY;
-            }
-            const rect = item.ele.getBoundingClientRect();
-            item.material.uniforms.uMouse.value = new _three.Vector2(this.mouse.x - rect.left, rect.top - this.mouse.y);
-        });
-    }
-    onMouseClick(event1) {
-    // this.customPass.uniforms.uPoint.value = new THREE.Vector3(event.clientX, this.scroller.offsetHeight - event.clientY - window.pageYOffset, 60);
-    // this.customPass.uniforms.time.value = 0;
-    }
-    onCardEnter(event1) {
-    // this.customPass.uniforms.uPoint.value = new THREE.Vector3(event.clientX, this.scroller.offsetHeight - event.clientY - window.pageYOffset, 60);
-    // this.customPass.uniforms.time.value = 0;
-    // console.log('enter', event)
-    }
-    onCardLeave(event1) {
-    // this.customPass.uniforms.uPoint.value = new THREE.Vector3(event.clientX, this.scroller.offsetHeight - event.clientY - window.pageYOffset, 60);
-    // this.customPass.uniforms.time.value = 0;
-    // console.log('leave', event)
-    }
 }
 exports.default = ScrollRig;
 
-},{"three":"ktPTu","../shaders/test2.glsl.js":"cfott","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","../shaders/bouncy.glsl.js":"b7TOh"}],"ktPTu":[function(require,module,exports) {
+},{"three":"ktPTu","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","../shaders/bouncy2.glsl.js":"2OHNj","three/examples/jsm/postprocessing/EffectComposer.js":"e5jie","three/examples/jsm/postprocessing/RenderPass.js":"hXnUO","three/examples/jsm/postprocessing/OutputPass.js":"bggV1","three/examples/jsm/postprocessing/SSAARenderPass.js":"VVSEq"}],"ktPTu":[function(require,module,exports) {
 /**
  * @license
  * Copyright 2010-2023 Three.js Authors
@@ -30814,12 +30782,12 @@ if (typeof window !== "undefined") {
     else window.__THREE__ = REVISION;
 }
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"cfott":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"2OHNj":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "vertexShader", ()=>vertexShader);
 parcelHelpers.export(exports, "fragmentShader", ()=>fragmentShader);
-const vertexShader = /* GLSL vert shader */ `
+const vertexShader = /* glsl */ `
 varying vec2 vUv;  
 
 void main()	{
@@ -30829,103 +30797,23 @@ void main()	{
 
 }
 `;
-const fragmentShader = /* GLSL frag shader */ `
-#define MAX_DIST 0.5
-#define PI 3.1415926535
-
+const fragmentShader = /* glsl */ `
 precision lowp float;
-uniform float uTime;
-uniform vec2 uMouse;
-uniform sampler2D uTexture;
-varying vec2 vUv;
-uniform vec2 uResolution;
-
-mat2 rot2d(float a){return mat2(cos(a), -sin(a), sin(a), cos(a));}
-
-void main() {
-  // vec2 texCoord = (gl_FragCoord.xy / uResolution.xy);
-  // float aspect = uResolution.x / uResolution.y;
-
-  vec2 newCoord = (vUv - .25) * 2.;
-
-  if (vUv.x > .25 && vUv.x < .75 && vUv.y > .25 && vUv.y < .75) {
-    gl_FragColor = texture2D(uTexture, newCoord);
-  }
-
-  vec2 mouseCoord = uMouse / uResolution.xy;
-  mouseCoord = vec2(mouseCoord.x, mouseCoord.y + 1.);
-
-  if (distance(vUv.xy, vec2(0.5)) < .1) {
-    gl_FragColor = vec4(1.,0.,0.,.4);
-  }
-
-  if (distance(mouseCoord.xy, newCoord.xy) < .1) {
-    gl_FragColor = vec4(0.,1.,0.,.4);
-  }
-
-
-
-
-
-  float aspect = iResolution.x / iResolution.y;
-  vec2 uv = (f / iResolution.xy) * 2. - 1.;
-  uv.x *= aspect; // fixes aspect ratio
-  vec2 m = (iMouse.xy / iResolution.xy) * 2. - 1.;
-  m.x *= aspect;
-  
-  float angle = atan(-m.y, m.x);//angle from center to mouse
-      
-  vec2 base = normalize(rot2d(angle) * vec2(0, 1.)); // rotate before deformation, in a circle
-  vec2 bn = vec2(-base.y, base.x); // base normal?
-  
-  vec2 range = uv - m; // distance..
-  float d1 = length(range); // distance from mouse
-  float fd1 = smoothstep(MAX_DIST, 0., d1); //amount of warp for this fragment based on distance from mouse
-  
-  float dd = dot(uv, base); //same as cos of angle between them?
-  
-  // sinc function
-  float sd = sin(dd * PI * 10.) / (dd * PI * 10.); // adds the sin wave to it
-  sd *= sin(iTime * 5.); // add time element
-  
-  uv += bn * sd * 0.1 * fd1;
-
-  vec4 col = texture(iChannel0, uv);
-  o = col;
-}
-`;
-
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"b7TOh":[function(require,module,exports) {
-var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
-parcelHelpers.defineInteropFlag(exports);
-parcelHelpers.export(exports, "vertexShader", ()=>vertexShader);
-parcelHelpers.export(exports, "fragmentShader", ()=>fragmentShader);
-const vertexShader = /* GLSL vert shader */ `
-varying vec2 vUv;  
-
-void main()	{
-  vUv = uv;
-
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-
-}
-`;
-const fragmentShader = /* GLSL frag shader */ `
-precision lowp float;
-#define MAX_DIST 0.5
+#define MAX_DIST .25
 #define PI 3.1415926535
 
 uniform float uTime;
-uniform vec2 uMouse;
+uniform vec4 uMouse;
 uniform sampler2D uTexture;
 uniform vec2 uResolution;
+uniform vec2 uWindow;
+uniform vec4 uEffect;
 varying vec2 vUv;
 
 mat2 rot2d(float a){return mat2(cos(a), -sin(a), sin(a), cos(a));}
 
 float getAngle(vec2 p1, vec2 p2) {
     return atan(p2.y - p1.y, p2.x - p1.x);
-    // return mod( atan(p1.x,p1.y) -atan(p2.x,p2.y), PI * 2.) - (PI * 2.)/2. ;
 }
 
 void main() {
@@ -30936,53 +30824,937 @@ void main() {
     vec2 texCoord = (vUv - .25) * 2.;
     vec2 uv = vec2(texCoord.x * aspect, texCoord.y);
 
-    vec2 mouseCoord = uMouse / uResolution.xy;
+    // vec2 mouseCoord = uMouse.xy / uResolution.xy; // mouse position at all times
+    vec2 mouseCoord = uEffect.xy / uResolution.xy; // where the mouse crossed the edge of the element
     mouseCoord = vec2(mouseCoord.x * aspect, mouseCoord.y + 1.);
 
-    
-    
-    
-    
-    //////
+    float angle = getAngle(center, mouseCoord);
 
-    float angle = getAngle(vec2(0.,0.), vec2(-mouseCoord.y, mouseCoord.x));
-
-    vec2 base = normalize(rot2d(angle) * vec2(0., 1.)); // rotate before deformation, in a circle
+    vec2 base = normalize(rot2d(-angle) * vec2(0., 1.)); // rotate before deformation, in a circle
     vec2 bn = vec2(-base.y, base.x); // base normal?
 
-    vec2 range = uv - mouseCoord; // distance..
-    float d1 = length(range); // distance from mouse
+    vec2 range = vec2(uv.x / aspect, uv.y) - vec2(mouseCoord.x / aspect, mouseCoord.y);
+    float d1 = length(range); // ????
+
     float fd1 = smoothstep(MAX_DIST, 0., d1); //amount of warp for this fragment based on distance from mouse
 
-    float dd = dot(uv, base); //same as cos of angle between them?
+    float dd = dot(uv - center, base); //same as cos of angle between them?
 
-    // sinc function
     float sd = sin(dd * PI * 10.) / (dd * PI * 10.); // adds the sin wave to it
     sd *= sin(uTime / 5.); // add time element
 
+    float warpFactor = sd * fd1 * 20.;
+    warpFactor *= (uEffect.z / 80.) * uEffect.w; //scale based on the effect time and direction
+
+    // normalized deformation amount no matter what size the image is
     uv = vec2(uv.x / aspect, uv.y);
-
-    uv += bn * sd * 0.1 * fd1;
-
+    uv += vec2(bn.x * warpFactor / uResolution.x, bn.y * warpFactor / uResolution.y);
 
     if (uv.x > .0 && uv.x < 1. && uv.y > .0 && uv.y < 1.) {
         gl_FragColor = texture2D(uTexture, uv);
     }
-
-    vec2 uv2 = vec2(uv.x * aspect, uv.y);
-
-    if (distance(uv2.xy, center) < .03) {
-        gl_FragColor = vec4(1.,0.,0.,.4);
-    }
-    if (distance(mouseCoord.xy, uv2.xy) < .1) {
-        gl_FragColor = vec4(0.,1.,0.,.4);
-    }
-
-
-    // gl_FragColor = vec4(vec3(dd), 1.);
 }
 `;
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}]},["7mGxH","fFaKF"], "fFaKF", "parcelRequire97ae")
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"e5jie":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "EffectComposer", ()=>EffectComposer);
+var _three = require("three");
+var _copyShaderJs = require("../shaders/CopyShader.js");
+var _shaderPassJs = require("./ShaderPass.js");
+var _maskPassJs = require("./MaskPass.js");
+class EffectComposer {
+    constructor(renderer, renderTarget){
+        this.renderer = renderer;
+        this._pixelRatio = renderer.getPixelRatio();
+        if (renderTarget === undefined) {
+            const size = renderer.getSize(new (0, _three.Vector2)());
+            this._width = size.width;
+            this._height = size.height;
+            renderTarget = new (0, _three.WebGLRenderTarget)(this._width * this._pixelRatio, this._height * this._pixelRatio, {
+                type: (0, _three.HalfFloatType)
+            });
+            renderTarget.texture.name = "EffectComposer.rt1";
+        } else {
+            this._width = renderTarget.width;
+            this._height = renderTarget.height;
+        }
+        this.renderTarget1 = renderTarget;
+        this.renderTarget2 = renderTarget.clone();
+        this.renderTarget2.texture.name = "EffectComposer.rt2";
+        this.writeBuffer = this.renderTarget1;
+        this.readBuffer = this.renderTarget2;
+        this.renderToScreen = true;
+        this.passes = [];
+        this.copyPass = new (0, _shaderPassJs.ShaderPass)((0, _copyShaderJs.CopyShader));
+        this.copyPass.material.blending = (0, _three.NoBlending);
+        this.clock = new (0, _three.Clock)();
+    }
+    swapBuffers() {
+        const tmp = this.readBuffer;
+        this.readBuffer = this.writeBuffer;
+        this.writeBuffer = tmp;
+    }
+    addPass(pass) {
+        this.passes.push(pass);
+        pass.setSize(this._width * this._pixelRatio, this._height * this._pixelRatio);
+    }
+    insertPass(pass, index) {
+        this.passes.splice(index, 0, pass);
+        pass.setSize(this._width * this._pixelRatio, this._height * this._pixelRatio);
+    }
+    removePass(pass) {
+        const index = this.passes.indexOf(pass);
+        if (index !== -1) this.passes.splice(index, 1);
+    }
+    isLastEnabledPass(passIndex) {
+        for(let i = passIndex + 1; i < this.passes.length; i++){
+            if (this.passes[i].enabled) return false;
+        }
+        return true;
+    }
+    render(deltaTime) {
+        // deltaTime value is in seconds
+        if (deltaTime === undefined) deltaTime = this.clock.getDelta();
+        const currentRenderTarget = this.renderer.getRenderTarget();
+        let maskActive = false;
+        for(let i = 0, il = this.passes.length; i < il; i++){
+            const pass = this.passes[i];
+            if (pass.enabled === false) continue;
+            pass.renderToScreen = this.renderToScreen && this.isLastEnabledPass(i);
+            pass.render(this.renderer, this.writeBuffer, this.readBuffer, deltaTime, maskActive);
+            if (pass.needsSwap) {
+                if (maskActive) {
+                    const context = this.renderer.getContext();
+                    const stencil = this.renderer.state.buffers.stencil;
+                    //context.stencilFunc( context.NOTEQUAL, 1, 0xffffffff );
+                    stencil.setFunc(context.NOTEQUAL, 1, 0xffffffff);
+                    this.copyPass.render(this.renderer, this.writeBuffer, this.readBuffer, deltaTime);
+                    //context.stencilFunc( context.EQUAL, 1, 0xffffffff );
+                    stencil.setFunc(context.EQUAL, 1, 0xffffffff);
+                }
+                this.swapBuffers();
+            }
+            if ((0, _maskPassJs.MaskPass) !== undefined) {
+                if (pass instanceof (0, _maskPassJs.MaskPass)) maskActive = true;
+                else if (pass instanceof (0, _maskPassJs.ClearMaskPass)) maskActive = false;
+            }
+        }
+        this.renderer.setRenderTarget(currentRenderTarget);
+    }
+    reset(renderTarget) {
+        if (renderTarget === undefined) {
+            const size = this.renderer.getSize(new (0, _three.Vector2)());
+            this._pixelRatio = this.renderer.getPixelRatio();
+            this._width = size.width;
+            this._height = size.height;
+            renderTarget = this.renderTarget1.clone();
+            renderTarget.setSize(this._width * this._pixelRatio, this._height * this._pixelRatio);
+        }
+        this.renderTarget1.dispose();
+        this.renderTarget2.dispose();
+        this.renderTarget1 = renderTarget;
+        this.renderTarget2 = renderTarget.clone();
+        this.writeBuffer = this.renderTarget1;
+        this.readBuffer = this.renderTarget2;
+    }
+    setSize(width, height) {
+        this._width = width;
+        this._height = height;
+        const effectiveWidth = this._width * this._pixelRatio;
+        const effectiveHeight = this._height * this._pixelRatio;
+        this.renderTarget1.setSize(effectiveWidth, effectiveHeight);
+        this.renderTarget2.setSize(effectiveWidth, effectiveHeight);
+        for(let i = 0; i < this.passes.length; i++)this.passes[i].setSize(effectiveWidth, effectiveHeight);
+    }
+    setPixelRatio(pixelRatio) {
+        this._pixelRatio = pixelRatio;
+        this.setSize(this._width, this._height);
+    }
+    dispose() {
+        this.renderTarget1.dispose();
+        this.renderTarget2.dispose();
+        this.copyPass.dispose();
+    }
+}
+
+},{"three":"ktPTu","../shaders/CopyShader.js":"d0PyX","./ShaderPass.js":"5IxTN","./MaskPass.js":"jn76N","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"d0PyX":[function(require,module,exports) {
+/**
+ * Full-screen textured quad shader
+ */ var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "CopyShader", ()=>CopyShader);
+const CopyShader = {
+    name: "CopyShader",
+    uniforms: {
+        "tDiffuse": {
+            value: null
+        },
+        "opacity": {
+            value: 1.0
+        }
+    },
+    vertexShader: /* glsl */ `
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vUv = uv;
+			gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+		}`,
+    fragmentShader: /* glsl */ `
+
+		uniform float opacity;
+
+		uniform sampler2D tDiffuse;
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vec4 texel = texture2D( tDiffuse, vUv );
+			gl_FragColor = opacity * texel;
+
+
+		}`
+};
+
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"5IxTN":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "ShaderPass", ()=>ShaderPass);
+var _three = require("three");
+var _passJs = require("./Pass.js");
+class ShaderPass extends (0, _passJs.Pass) {
+    constructor(shader, textureID){
+        super();
+        this.textureID = textureID !== undefined ? textureID : "tDiffuse";
+        if (shader instanceof (0, _three.ShaderMaterial)) {
+            this.uniforms = shader.uniforms;
+            this.material = shader;
+        } else if (shader) {
+            this.uniforms = (0, _three.UniformsUtils).clone(shader.uniforms);
+            this.material = new (0, _three.ShaderMaterial)({
+                name: shader.name !== undefined ? shader.name : "unspecified",
+                defines: Object.assign({}, shader.defines),
+                uniforms: this.uniforms,
+                vertexShader: shader.vertexShader,
+                fragmentShader: shader.fragmentShader
+            });
+        }
+        this.fsQuad = new (0, _passJs.FullScreenQuad)(this.material);
+    }
+    render(renderer, writeBuffer, readBuffer /*, deltaTime, maskActive */ ) {
+        if (this.uniforms[this.textureID]) this.uniforms[this.textureID].value = readBuffer.texture;
+        this.fsQuad.material = this.material;
+        if (this.renderToScreen) {
+            renderer.setRenderTarget(null);
+            this.fsQuad.render(renderer);
+        } else {
+            renderer.setRenderTarget(writeBuffer);
+            // TODO: Avoid using autoClear properties, see https://github.com/mrdoob/three.js/pull/15571#issuecomment-465669600
+            if (this.clear) renderer.clear(renderer.autoClearColor, renderer.autoClearDepth, renderer.autoClearStencil);
+            this.fsQuad.render(renderer);
+        }
+    }
+    dispose() {
+        this.material.dispose();
+        this.fsQuad.dispose();
+    }
+}
+
+},{"three":"ktPTu","./Pass.js":"i2IfB","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"i2IfB":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "Pass", ()=>Pass);
+parcelHelpers.export(exports, "FullScreenQuad", ()=>FullScreenQuad);
+var _three = require("three");
+class Pass {
+    constructor(){
+        this.isPass = true;
+        // if set to true, the pass is processed by the composer
+        this.enabled = true;
+        // if set to true, the pass indicates to swap read and write buffer after rendering
+        this.needsSwap = true;
+        // if set to true, the pass clears its buffer before rendering
+        this.clear = false;
+        // if set to true, the result of the pass is rendered to screen. This is set automatically by EffectComposer.
+        this.renderToScreen = false;
+    }
+    setSize() {}
+    render() {
+        console.error("THREE.Pass: .render() must be implemented in derived pass.");
+    }
+    dispose() {}
+}
+// Helper for passes that need to fill the viewport with a single quad.
+const _camera = new (0, _three.OrthographicCamera)(-1, 1, 1, -1, 0, 1);
+// https://github.com/mrdoob/three.js/pull/21358
+const _geometry = new (0, _three.BufferGeometry)();
+_geometry.setAttribute("position", new (0, _three.Float32BufferAttribute)([
+    -1,
+    3,
+    0,
+    -1,
+    -1,
+    0,
+    3,
+    -1,
+    0
+], 3));
+_geometry.setAttribute("uv", new (0, _three.Float32BufferAttribute)([
+    0,
+    2,
+    0,
+    0,
+    2,
+    0
+], 2));
+class FullScreenQuad {
+    constructor(material){
+        this._mesh = new (0, _three.Mesh)(_geometry, material);
+    }
+    dispose() {
+        this._mesh.geometry.dispose();
+    }
+    render(renderer) {
+        renderer.render(this._mesh, _camera);
+    }
+    get material() {
+        return this._mesh.material;
+    }
+    set material(value) {
+        this._mesh.material = value;
+    }
+}
+
+},{"three":"ktPTu","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"jn76N":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "MaskPass", ()=>MaskPass);
+parcelHelpers.export(exports, "ClearMaskPass", ()=>ClearMaskPass);
+var _passJs = require("./Pass.js");
+class MaskPass extends (0, _passJs.Pass) {
+    constructor(scene, camera){
+        super();
+        this.scene = scene;
+        this.camera = camera;
+        this.clear = true;
+        this.needsSwap = false;
+        this.inverse = false;
+    }
+    render(renderer, writeBuffer, readBuffer /*, deltaTime, maskActive */ ) {
+        const context = renderer.getContext();
+        const state = renderer.state;
+        // don't update color or depth
+        state.buffers.color.setMask(false);
+        state.buffers.depth.setMask(false);
+        // lock buffers
+        state.buffers.color.setLocked(true);
+        state.buffers.depth.setLocked(true);
+        // set up stencil
+        let writeValue, clearValue;
+        if (this.inverse) {
+            writeValue = 0;
+            clearValue = 1;
+        } else {
+            writeValue = 1;
+            clearValue = 0;
+        }
+        state.buffers.stencil.setTest(true);
+        state.buffers.stencil.setOp(context.REPLACE, context.REPLACE, context.REPLACE);
+        state.buffers.stencil.setFunc(context.ALWAYS, writeValue, 0xffffffff);
+        state.buffers.stencil.setClear(clearValue);
+        state.buffers.stencil.setLocked(true);
+        // draw into the stencil buffer
+        renderer.setRenderTarget(readBuffer);
+        if (this.clear) renderer.clear();
+        renderer.render(this.scene, this.camera);
+        renderer.setRenderTarget(writeBuffer);
+        if (this.clear) renderer.clear();
+        renderer.render(this.scene, this.camera);
+        // unlock color and depth buffer and make them writable for subsequent rendering/clearing
+        state.buffers.color.setLocked(false);
+        state.buffers.depth.setLocked(false);
+        state.buffers.color.setMask(true);
+        state.buffers.depth.setMask(true);
+        // only render where stencil is set to 1
+        state.buffers.stencil.setLocked(false);
+        state.buffers.stencil.setFunc(context.EQUAL, 1, 0xffffffff); // draw if == 1
+        state.buffers.stencil.setOp(context.KEEP, context.KEEP, context.KEEP);
+        state.buffers.stencil.setLocked(true);
+    }
+}
+class ClearMaskPass extends (0, _passJs.Pass) {
+    constructor(){
+        super();
+        this.needsSwap = false;
+    }
+    render(renderer /*, writeBuffer, readBuffer, deltaTime, maskActive */ ) {
+        renderer.state.buffers.stencil.setLocked(false);
+        renderer.state.buffers.stencil.setTest(false);
+    }
+}
+
+},{"./Pass.js":"i2IfB","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"hXnUO":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "RenderPass", ()=>RenderPass);
+var _three = require("three");
+var _passJs = require("./Pass.js");
+class RenderPass extends (0, _passJs.Pass) {
+    constructor(scene, camera, overrideMaterial = null, clearColor = null, clearAlpha = null){
+        super();
+        this.scene = scene;
+        this.camera = camera;
+        this.overrideMaterial = overrideMaterial;
+        this.clearColor = clearColor;
+        this.clearAlpha = clearAlpha;
+        this.clear = true;
+        this.clearDepth = false;
+        this.needsSwap = false;
+        this._oldClearColor = new (0, _three.Color)();
+    }
+    render(renderer, writeBuffer, readBuffer /*, deltaTime, maskActive */ ) {
+        const oldAutoClear = renderer.autoClear;
+        renderer.autoClear = false;
+        let oldClearAlpha, oldOverrideMaterial;
+        if (this.overrideMaterial !== null) {
+            oldOverrideMaterial = this.scene.overrideMaterial;
+            this.scene.overrideMaterial = this.overrideMaterial;
+        }
+        if (this.clearColor !== null) {
+            renderer.getClearColor(this._oldClearColor);
+            renderer.setClearColor(this.clearColor);
+        }
+        if (this.clearAlpha !== null) {
+            oldClearAlpha = renderer.getClearAlpha();
+            renderer.setClearAlpha(this.clearAlpha);
+        }
+        if (this.clearDepth == true) renderer.clearDepth();
+        renderer.setRenderTarget(this.renderToScreen ? null : readBuffer);
+        if (this.clear === true) // TODO: Avoid using autoClear properties, see https://github.com/mrdoob/three.js/pull/15571#issuecomment-465669600
+        renderer.clear(renderer.autoClearColor, renderer.autoClearDepth, renderer.autoClearStencil);
+        renderer.render(this.scene, this.camera);
+        // restore
+        if (this.clearColor !== null) renderer.setClearColor(this._oldClearColor);
+        if (this.clearAlpha !== null) renderer.setClearAlpha(oldClearAlpha);
+        if (this.overrideMaterial !== null) this.scene.overrideMaterial = oldOverrideMaterial;
+        renderer.autoClear = oldAutoClear;
+    }
+}
+
+},{"three":"ktPTu","./Pass.js":"i2IfB","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"bggV1":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "OutputPass", ()=>OutputPass);
+var _three = require("three");
+var _passJs = require("./Pass.js");
+var _outputShaderJs = require("../shaders/OutputShader.js");
+class OutputPass extends (0, _passJs.Pass) {
+    constructor(){
+        super();
+        //
+        const shader = (0, _outputShaderJs.OutputShader);
+        this.uniforms = (0, _three.UniformsUtils).clone(shader.uniforms);
+        this.material = new (0, _three.RawShaderMaterial)({
+            uniforms: this.uniforms,
+            vertexShader: shader.vertexShader,
+            fragmentShader: shader.fragmentShader
+        });
+        this.fsQuad = new (0, _passJs.FullScreenQuad)(this.material);
+        // internal cache
+        this._outputColorSpace = null;
+        this._toneMapping = null;
+    }
+    render(renderer, writeBuffer, readBuffer /*, deltaTime, maskActive */ ) {
+        this.uniforms["tDiffuse"].value = readBuffer.texture;
+        this.uniforms["toneMappingExposure"].value = renderer.toneMappingExposure;
+        // rebuild defines if required
+        if (this._outputColorSpace !== renderer.outputColorSpace || this._toneMapping !== renderer.toneMapping) {
+            this._outputColorSpace = renderer.outputColorSpace;
+            this._toneMapping = renderer.toneMapping;
+            this.material.defines = {};
+            if ((0, _three.ColorManagement).getTransfer(this._outputColorSpace) === (0, _three.SRGBTransfer)) this.material.defines.SRGB_TRANSFER = "";
+            if (this._toneMapping === (0, _three.LinearToneMapping)) this.material.defines.LINEAR_TONE_MAPPING = "";
+            else if (this._toneMapping === (0, _three.ReinhardToneMapping)) this.material.defines.REINHARD_TONE_MAPPING = "";
+            else if (this._toneMapping === (0, _three.CineonToneMapping)) this.material.defines.CINEON_TONE_MAPPING = "";
+            else if (this._toneMapping === (0, _three.ACESFilmicToneMapping)) this.material.defines.ACES_FILMIC_TONE_MAPPING = "";
+            this.material.needsUpdate = true;
+        }
+        //
+        if (this.renderToScreen === true) {
+            renderer.setRenderTarget(null);
+            this.fsQuad.render(renderer);
+        } else {
+            renderer.setRenderTarget(writeBuffer);
+            if (this.clear) renderer.clear(renderer.autoClearColor, renderer.autoClearDepth, renderer.autoClearStencil);
+            this.fsQuad.render(renderer);
+        }
+    }
+    dispose() {
+        this.material.dispose();
+        this.fsQuad.dispose();
+    }
+}
+
+},{"three":"ktPTu","./Pass.js":"i2IfB","../shaders/OutputShader.js":"76ZI2","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"76ZI2":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "OutputShader", ()=>OutputShader);
+var _three = require("three");
+const OutputShader = {
+    uniforms: {
+        "tDiffuse": {
+            value: null
+        },
+        "toneMappingExposure": {
+            value: 1
+        }
+    },
+    vertexShader: /* glsl */ `
+		precision highp float;
+
+		uniform mat4 modelViewMatrix;
+		uniform mat4 projectionMatrix;
+
+		attribute vec3 position;
+		attribute vec2 uv;
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vUv = uv;
+			gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+		}`,
+    fragmentShader: /* glsl */ `
+	
+		precision highp float;
+
+		uniform sampler2D tDiffuse;
+
+		` + (0, _three.ShaderChunk)["tonemapping_pars_fragment"] + (0, _three.ShaderChunk)["colorspace_pars_fragment"] + `
+
+		varying vec2 vUv;
+
+		void main() {
+
+			gl_FragColor = texture2D( tDiffuse, vUv );
+
+			// tone mapping
+
+			#ifdef LINEAR_TONE_MAPPING
+
+				gl_FragColor.rgb = LinearToneMapping( gl_FragColor.rgb );
+
+			#elif defined( REINHARD_TONE_MAPPING )
+
+				gl_FragColor.rgb = ReinhardToneMapping( gl_FragColor.rgb );
+
+			#elif defined( CINEON_TONE_MAPPING )
+
+				gl_FragColor.rgb = OptimizedCineonToneMapping( gl_FragColor.rgb );
+
+			#elif defined( ACES_FILMIC_TONE_MAPPING )
+
+				gl_FragColor.rgb = ACESFilmicToneMapping( gl_FragColor.rgb );
+
+			#endif
+
+			// color space
+
+			#ifdef SRGB_TRANSFER
+
+				gl_FragColor = sRGBTransferOETF( gl_FragColor );
+
+			#endif
+
+		}`
+};
+
+},{"three":"ktPTu","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"VVSEq":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "SSAARenderPass", ()=>SSAARenderPass);
+var _three = require("three");
+var _passJs = require("./Pass.js");
+var _copyShaderJs = require("../shaders/CopyShader.js");
+/**
+*
+* Supersample Anti-Aliasing Render Pass
+*
+* This manual approach to SSAA re-renders the scene ones for each sample with camera jitter and accumulates the results.
+*
+* References: https://en.wikipedia.org/wiki/Supersampling
+*
+*/ class SSAARenderPass extends (0, _passJs.Pass) {
+    constructor(scene, camera, clearColor, clearAlpha){
+        super();
+        this.scene = scene;
+        this.camera = camera;
+        this.sampleLevel = 4; // specified as n, where the number of samples is 2^n, so sampleLevel = 4, is 2^4 samples, 16.
+        this.unbiased = true;
+        // as we need to clear the buffer in this pass, clearColor must be set to something, defaults to black.
+        this.clearColor = clearColor !== undefined ? clearColor : 0x000000;
+        this.clearAlpha = clearAlpha !== undefined ? clearAlpha : 0;
+        this._oldClearColor = new (0, _three.Color)();
+        const copyShader = (0, _copyShaderJs.CopyShader);
+        this.copyUniforms = (0, _three.UniformsUtils).clone(copyShader.uniforms);
+        this.copyMaterial = new (0, _three.ShaderMaterial)({
+            uniforms: this.copyUniforms,
+            vertexShader: copyShader.vertexShader,
+            fragmentShader: copyShader.fragmentShader,
+            transparent: true,
+            depthTest: false,
+            depthWrite: false,
+            premultipliedAlpha: true,
+            blending: (0, _three.AdditiveBlending)
+        });
+        this.fsQuad = new (0, _passJs.FullScreenQuad)(this.copyMaterial);
+    }
+    dispose() {
+        if (this.sampleRenderTarget) {
+            this.sampleRenderTarget.dispose();
+            this.sampleRenderTarget = null;
+        }
+        this.copyMaterial.dispose();
+        this.fsQuad.dispose();
+    }
+    setSize(width, height) {
+        if (this.sampleRenderTarget) this.sampleRenderTarget.setSize(width, height);
+    }
+    render(renderer, writeBuffer, readBuffer) {
+        if (!this.sampleRenderTarget) {
+            this.sampleRenderTarget = new (0, _three.WebGLRenderTarget)(readBuffer.width, readBuffer.height, {
+                type: (0, _three.HalfFloatType)
+            });
+            this.sampleRenderTarget.texture.name = "SSAARenderPass.sample";
+        }
+        const jitterOffsets = _JitterVectors[Math.max(0, Math.min(this.sampleLevel, 5))];
+        const autoClear = renderer.autoClear;
+        renderer.autoClear = false;
+        renderer.getClearColor(this._oldClearColor);
+        const oldClearAlpha = renderer.getClearAlpha();
+        const baseSampleWeight = 1.0 / jitterOffsets.length;
+        const roundingRange = 1 / 32;
+        this.copyUniforms["tDiffuse"].value = this.sampleRenderTarget.texture;
+        const viewOffset = {
+            fullWidth: readBuffer.width,
+            fullHeight: readBuffer.height,
+            offsetX: 0,
+            offsetY: 0,
+            width: readBuffer.width,
+            height: readBuffer.height
+        };
+        const originalViewOffset = Object.assign({}, this.camera.view);
+        if (originalViewOffset.enabled) Object.assign(viewOffset, originalViewOffset);
+        // render the scene multiple times, each slightly jitter offset from the last and accumulate the results.
+        for(let i = 0; i < jitterOffsets.length; i++){
+            const jitterOffset = jitterOffsets[i];
+            if (this.camera.setViewOffset) this.camera.setViewOffset(viewOffset.fullWidth, viewOffset.fullHeight, viewOffset.offsetX + jitterOffset[0] * 0.0625, viewOffset.offsetY + jitterOffset[1] * 0.0625, viewOffset.width, viewOffset.height);
+            let sampleWeight = baseSampleWeight;
+            if (this.unbiased) {
+                // the theory is that equal weights for each sample lead to an accumulation of rounding errors.
+                // The following equation varies the sampleWeight per sample so that it is uniformly distributed
+                // across a range of values whose rounding errors cancel each other out.
+                const uniformCenteredDistribution = -0.5 + (i + 0.5) / jitterOffsets.length;
+                sampleWeight += roundingRange * uniformCenteredDistribution;
+            }
+            this.copyUniforms["opacity"].value = sampleWeight;
+            renderer.setClearColor(this.clearColor, this.clearAlpha);
+            renderer.setRenderTarget(this.sampleRenderTarget);
+            renderer.clear();
+            renderer.render(this.scene, this.camera);
+            renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+            if (i === 0) {
+                renderer.setClearColor(0x000000, 0.0);
+                renderer.clear();
+            }
+            this.fsQuad.render(renderer);
+        }
+        if (this.camera.setViewOffset && originalViewOffset.enabled) this.camera.setViewOffset(originalViewOffset.fullWidth, originalViewOffset.fullHeight, originalViewOffset.offsetX, originalViewOffset.offsetY, originalViewOffset.width, originalViewOffset.height);
+        else if (this.camera.clearViewOffset) this.camera.clearViewOffset();
+        renderer.autoClear = autoClear;
+        renderer.setClearColor(this._oldClearColor, oldClearAlpha);
+    }
+}
+// These jitter vectors are specified in integers because it is easier.
+// I am assuming a [-8,8) integer grid, but it needs to be mapped onto [-0.5,0.5)
+// before being used, thus these integers need to be scaled by 1/16.
+//
+// Sample patterns reference: https://msdn.microsoft.com/en-us/library/windows/desktop/ff476218%28v=vs.85%29.aspx?f=255&MSPPError=-2147217396
+const _JitterVectors = [
+    [
+        [
+            0,
+            0
+        ]
+    ],
+    [
+        [
+            4,
+            4
+        ],
+        [
+            -4,
+            -4
+        ]
+    ],
+    [
+        [
+            -2,
+            -6
+        ],
+        [
+            6,
+            -2
+        ],
+        [
+            -6,
+            2
+        ],
+        [
+            2,
+            6
+        ]
+    ],
+    [
+        [
+            1,
+            -3
+        ],
+        [
+            -1,
+            3
+        ],
+        [
+            5,
+            1
+        ],
+        [
+            -3,
+            -5
+        ],
+        [
+            -5,
+            5
+        ],
+        [
+            -7,
+            -1
+        ],
+        [
+            3,
+            7
+        ],
+        [
+            7,
+            -7
+        ]
+    ],
+    [
+        [
+            1,
+            1
+        ],
+        [
+            -1,
+            -3
+        ],
+        [
+            -3,
+            2
+        ],
+        [
+            4,
+            -1
+        ],
+        [
+            -5,
+            -2
+        ],
+        [
+            2,
+            5
+        ],
+        [
+            5,
+            3
+        ],
+        [
+            3,
+            -5
+        ],
+        [
+            -2,
+            6
+        ],
+        [
+            0,
+            -7
+        ],
+        [
+            -4,
+            -6
+        ],
+        [
+            -6,
+            4
+        ],
+        [
+            -8,
+            0
+        ],
+        [
+            7,
+            -4
+        ],
+        [
+            6,
+            7
+        ],
+        [
+            -7,
+            -8
+        ]
+    ],
+    [
+        [
+            -4,
+            -7
+        ],
+        [
+            -7,
+            -5
+        ],
+        [
+            -3,
+            -5
+        ],
+        [
+            -5,
+            -4
+        ],
+        [
+            -1,
+            -4
+        ],
+        [
+            -2,
+            -2
+        ],
+        [
+            -6,
+            -1
+        ],
+        [
+            -4,
+            0
+        ],
+        [
+            -7,
+            1
+        ],
+        [
+            -1,
+            2
+        ],
+        [
+            -6,
+            3
+        ],
+        [
+            -3,
+            3
+        ],
+        [
+            -7,
+            6
+        ],
+        [
+            -3,
+            6
+        ],
+        [
+            -5,
+            7
+        ],
+        [
+            -1,
+            7
+        ],
+        [
+            5,
+            -7
+        ],
+        [
+            1,
+            -6
+        ],
+        [
+            6,
+            -5
+        ],
+        [
+            4,
+            -4
+        ],
+        [
+            2,
+            -3
+        ],
+        [
+            7,
+            -2
+        ],
+        [
+            1,
+            -1
+        ],
+        [
+            4,
+            -1
+        ],
+        [
+            2,
+            1
+        ],
+        [
+            6,
+            2
+        ],
+        [
+            0,
+            4
+        ],
+        [
+            4,
+            4
+        ],
+        [
+            2,
+            5
+        ],
+        [
+            7,
+            5
+        ],
+        [
+            5,
+            6
+        ],
+        [
+            3,
+            7
+        ]
+    ]
+];
+
+},{"three":"ktPTu","./Pass.js":"i2IfB","../shaders/CopyShader.js":"d0PyX","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}]},["7mGxH","fFaKF"], "fFaKF", "parcelRequire97ae")
 
 //# sourceMappingURL=index.js.map

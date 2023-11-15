@@ -2,6 +2,11 @@ import * as THREE from 'three'
 import { vertexShader, fragmentShader } from '../shaders/test2.glsl.js';
 import { vertexShader as vertexShaderBuffer, fragmentShader as fragmentShaderBuffer } from '../shaders/buffer.glsl.js';
 
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
 export default class ScrollRig {
     constructor(rig, itemSelector = '[data-mx-shader]') {
 
@@ -62,6 +67,16 @@ export default class ScrollRig {
         this.renderer.setClearColor( 0x000000, 0 );
         this.renderer.setSize(this.scroller.offsetWidth, this.scroller.offsetHeight)
         this.scroller.appendChild(this.renderer.domElement)
+
+        this.composer = new EffectComposer( this.renderer );
+        const renderPass = new RenderPass( scene, camera );
+        this.composer.addPass( renderPass );
+
+        const smaaPass = new SMAAPass();
+        this.composer.addPass( smaaPass );
+
+        const outputPass = new OutputPass();
+        this.composer.addPass( outputPass );
 
         this.initScrollerItems();
     }
@@ -147,8 +162,8 @@ export default class ScrollRig {
         })
         
         // Render the scene
-        this.renderer.render(this.scene, this.camera)
-        
+        // this.renderer.render(this.scene, this.camera)
+        this.composer.render();
         // Request next frame of animation
         requestAnimationFrame(this.update)
     }
