@@ -1,5 +1,6 @@
 html,body {
     background: #eee;
+    overflow-x: clip;
 }
 .scroll-rig {
     position: absolute;
@@ -40,8 +41,9 @@ p {
 .card {
     width: fit-content;
     margin: auto;
-    margin-top: 3rem;
-    margin-bottom: 3rem;
+    margin-top: 20rem;
+    margin-bottom: 10rem;
+    cursor: pointer;
     .image-holder {
         width: auto;
         height: auto;
@@ -53,6 +55,7 @@ p {
         object-fit: cover;
         margin: 0;
         -webkit-user-drag: none;
+        border-radius: 3rem;
     }
 }
 
@@ -81,4 +84,11 @@ canvas {
     width: 100%;
     height: 100%;
     display: block;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-gap: 5rem;
+    width: 100vw;
 }
