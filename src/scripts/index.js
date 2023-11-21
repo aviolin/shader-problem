@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
         rig: document.querySelector('.scroll-rig'),
         antialias: null,
         debug: true,
-        elementOpacity: .3,
+        // elementOpacity: .3,
     } );
 })
 

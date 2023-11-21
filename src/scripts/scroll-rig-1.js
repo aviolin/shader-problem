@@ -67,6 +67,9 @@ export default class ScrollRig {
             warpRadius: 5.,
             deceleration: 7.,
             density: 25.,
+            speed: 1.,
+            antialiasing: .001,
+            movementFactor: 1.,
         }
         this.scaleOpts = {
             amount: .15,
@@ -167,7 +170,7 @@ export default class ScrollRig {
 
         const gui = new GUI()
         const cubeFolder = gui.addFolder('Shader Effect')
-        cubeFolder.add(this.shaderOpts, 'warpFactor', -1000, 2000)
+        cubeFolder.add(this.shaderOpts, 'warpFactor', 0, 1000)
             .onChange(() => {
                 this.scrollerItems.forEach(item => {
                     item.material.uniforms.uOptions.value.x = this.shaderOpts.warpFactor;
@@ -189,6 +192,24 @@ export default class ScrollRig {
             .onChange(() => {
                 this.scrollerItems.forEach(item => {
                     item.material.uniforms.uOptions.value.w = this.shaderOpts.density;
+                })
+            })
+        cubeFolder.add(this.shaderOpts, 'speed', 0, 5, .1)
+            .onChange(() => {
+                this.scrollerItems.forEach(item => {
+                    item.material.uniforms.uOptions2.value.x = this.shaderOpts.speed;
+                })
+            })
+        cubeFolder.add(this.shaderOpts, 'antialiasing', 0, .01, .0005)
+            .onChange(() => {
+                this.scrollerItems.forEach(item => {
+                    item.material.uniforms.uOptions2.value.y = this.shaderOpts.antialiasing;
+                })
+            })
+        cubeFolder.add(this.shaderOpts, 'movementFactor', -4., 4., .1)
+            .onChange(() => {
+                this.scrollerItems.forEach(item => {
+                    item.material.uniforms.uOptions2.value.z = this.shaderOpts.movementFactor;
                 })
             })
         cubeFolder.open()
@@ -265,7 +286,8 @@ export default class ScrollRig {
                         uWindow: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
                         uBorderRadius: { value: .4 },
                         uScale: { value: 1 },
-                        uOptions: { value: new THREE.Vector4( this.shaderOpts.warpFactor, this.shaderOpts.warpRadius, this.shaderOpts.deceleration, this.shaderOpts.density )}
+                        uOptions: { value: new THREE.Vector4( this.shaderOpts.warpFactor, this.shaderOpts.warpRadius, this.shaderOpts.deceleration, this.shaderOpts.density )},
+                        uOptions2: { value: new THREE.Vector4( this.shaderOpts.speed, this.shaderOpts.antialiasing, this.shaderOpts.movementFactor ,0. )}
                     },
 
                     vertexShader: vertexShaderBouncy,
@@ -293,6 +315,7 @@ export default class ScrollRig {
             let curScale = 0;
 
             const update = () => {
+
                 let curUEffect = item.material.uniforms.uEffect.value;
                 item.material.uniforms.uTime.value += 1;
                 item.material.uniforms.uEffect.value = new THREE.Vector4(curUEffect.x, curUEffect.y, Math.max(0, curUEffect.z - 1), curUEffect.w);                
@@ -331,6 +354,10 @@ export default class ScrollRig {
             }
             mediaElement.addEventListener('mouseenter', onEnter);
             mediaElement.addEventListener('mouseleave', onLeave);
+            document.addEventListener('mousemove', (event) => {
+                const rect = item.getBoundingClientRect();
+                item.material.uniforms.uMouse.value = new THREE.Vector4( event.clientX - rect.left, rect.top - event.clientY);
+            })
 
             const thisObj = this.scrollerItems.push({
                 // DOM element
